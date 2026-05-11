@@ -343,18 +343,35 @@
             setView('record');
         };
     </script>
-<div class="p-4 mt-10 border-t border-slate-200">
-    <button onclick="setupKey()" class="text-xs text-slate-400 underline">Indstil API nøgle</button>
-</div>
 
-<script>
-function setupKey() {
-    const key = prompt("Indtast din nye Gemini API-nøgle:");
-    if(key) {
-        localStorage.setItem('gemini_api_key', key);
-        location.reload();
-    }
-}
-</script>
+    <div class="p-4 mt-10 border-t border-slate-200 text-center">
+        <button onclick="setupKey()" class="text-xs text-slate-400 underline opacity-50 hover:opacity-100 transition">
+            Indstil/Skift API nøgle
+        </button>
+    </div>
+
+    <script>
+        function setupKey() {
+            const currentKey = localStorage.getItem('gemini_api_key') || "";
+            const key = prompt("Indtast din Gemini API-nøgle fra Google AI Studio:", currentKey);
+            
+            if (key !== null && key.trim() !== "") {
+                localStorage.setItem('gemini_api_key', key.trim());
+                alert("Nøglen er gemt lokalt på din telefon/computer.");
+                location.reload();
+            }
+        }
+
+        // Tjek ved opstart om der mangler en nøgle
+        window.addEventListener('DOMContentLoaded', () => {
+            if (!localStorage.getItem('gemini_api_key')) {
+                setTimeout(() => {
+                    if(confirm("Velkommen! Du skal indstille din API-nøgle for at bruge appen. Vil du gøre det nu?")) {
+                        setupKey();
+                    }
+                }, 1000);
+            }
+        });
+    </script>
 </body>
 </html>
