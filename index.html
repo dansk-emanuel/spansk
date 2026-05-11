@@ -3,295 +3,120 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sprogtræner - Dansk til Spansk</title>
+    <title>Spansk Træner v2</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        .card-flip { perspective: 1000px; }
-        .card-inner {
-            transition: transform 0.6s;
-            transform-style: preserve-3d;
-            cursor: pointer;
-        }
-        .card-inner.flipped { transform: rotateY(180deg); }
-        .card-front, .card-back {
-            backface-visibility: hidden;
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-        }
-        .card-back { transform: rotateY(180deg); }
-    </style>
 </head>
-<body class="bg-slate-50 min-h-screen font-sans">
+<body class="bg-slate-100 min-h-screen font-sans p-4">
 
-    <div id="app" class="max-w-2xl mx-auto px-4 py-8">
-        <header class="text-center mb-10">
-            <h1 class="text-3xl font-bold text-slate-800">Min Sprogtræner</h1>
-            <p class="text-slate-600 mt-2">Lær spansk gennem dine egne ord</p>
-        </header>
+    <div class="max-w-md mx-auto bg-white rounded-3xl shadow-xl overflow-hidden mt-6">
+        <div class="bg-blue-600 p-6 text-white text-center">
+            <h1 class="text-2xl font-bold">Spansk Træner</h1>
+            <p class="opacity-80">Tryk, tal dansk, lær spansk</p>
+        </div>
 
-        <nav class="flex justify-center gap-4 mb-8">
-            <button onclick="setView('record')" class="px-4 py-2 rounded-full font-medium transition active:scale-95 bg-blue-600 text-white shadow-md" id="nav-record">Optag</button>
-            <button onclick="setView('list')" class="px-4 py-2 rounded-full font-medium transition active:scale-95 bg-white text-slate-700 border border-slate-200" id="nav-list">Mine Sætninger</button>
-            <button onclick="setView('practice')" class="px-4 py-2 rounded-full font-medium transition active:scale-95 bg-white text-slate-700 border border-slate-200" id="nav-practice">Træn</button>
-        </nav>
-
-        <main id="content">
-            <div id="loader" class="hidden flex flex-col items-center justify-center py-12">
-                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-                <p class="text-slate-600">Analyserer tale og oversætter...</p>
+        <div class="p-6 space-y-6">
+            <!-- Knappen -->
+            <div class="flex flex-col items-center justify-center space-y-4">
+                <button id="startBtn" class="w-24 h-24 bg-red-500 rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform">
+                    <span id="micIcon" class="text-white text-3xl">🎤</span>
+                </button>
+                <p id="status" class="text-slate-500 font-medium">Tryk for at tale</p>
             </div>
 
-            <section id="view-record" class="space-y-6">
-                <div class="bg-white p-8 rounded-2xl shadow-sm border border-slate-100 text-center">
-                    <div class="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6 cursor-pointer hover:bg-red-100 transition active:scale-90 shadow-inner" id="recordBtn">
-                        <svg id="micIcon" xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                        </svg>
-                    </div>
-                    <h2 class="text-xl font-semibold text-slate-800" id="recordStatus">Tryk for at tale</h2>
-                    <p class="text-slate-500 mt-2">Sig en eller flere sætninger på dansk.</p>
+            <!-- Resultat felt -->
+            <div id="resultArea" class="hidden space-y-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <div>
+                    <p class="text-xs text-slate-400 uppercase font-bold">Du sagde:</p>
+                    <p id="danishText" class="text-lg text-slate-800"></p>
                 </div>
-            </section>
-
-            <section id="view-list" class="hidden space-y-4">
-                <div id="sentencesContainer" class="space-y-3"></div>
-            </section>
-
-            <section id="view-practice" class="hidden space-y-6">
-                <div id="flashcardContainer" class="flex flex-col items-center"></div>
-            </section>
-        </main>
-    </div>
-
-    <template id="sentence-item-tmpl">
-        <div class="bg-white p-4 rounded-xl border border-slate-200 flex justify-between items-center shadow-sm">
-            <div class="flex-1">
-                <p class="font-medium text-slate-800 danish-text"></p>
-                <p class="text-blue-600 italic spanish-text text-sm mt-1"></p>
-            </div>
-            <div class="flex gap-1">
-                <button class="p-2 text-slate-400 hover:text-blue-600 speak-btn text-xl">🔊</button>
-                <button class="p-2 text-slate-300 hover:text-red-500 delete-btn text-xl">🗑️</button>
+                <div class="pt-2 border-t border-slate-200">
+                    <p class="text-xs text-blue-400 uppercase font-bold">Spansk:</p>
+                    <p id="spanishText" class="text-xl text-blue-700 font-bold italic"></p>
+                </div>
+                <button onclick="playSpanish()" class="w-full py-2 bg-blue-100 text-blue-700 rounded-lg font-bold">Hør udtale 🔊</button>
             </div>
         </div>
-    </template>
+
+        <!-- Indstillinger -->
+        <div class="p-4 bg-slate-50 text-center border-t border-slate-100">
+            <button onclick="setupKey()" class="text-xs text-slate-400 underline">Indstil API Nøgle</button>
+        </div>
+    </div>
 
     <script>
-        // Hent API nøgle fra browserens hukommelse
-        let sentences = JSON.parse(localStorage.getItem('language_sentences') || '[]');
-        let practiceQueue = [];
-        let mediaRecorder;
-        let audioChunks = [];
-        let isRecording = false;
-
-        function setView(view) {
-            document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
-            document.getElementById(`view-${view}`).classList.remove('hidden');
-            document.querySelectorAll('nav button').forEach(b => {
-                b.classList.remove('bg-blue-600', 'text-white', 'shadow-md');
-                b.classList.add('bg-white', 'text-slate-700');
-            });
-            const activeBtn = document.getElementById(`nav-${view}`);
-            activeBtn.classList.add('bg-blue-600', 'text-white', 'shadow-md');
-            activeBtn.classList.remove('bg-white', 'text-slate-700');
-
-            if(view === 'list') renderList();
-            if(view === 'practice') startPractice();
+        const startBtn = document.getElementById('startBtn');
+        const status = document.getElementById('status');
+        const resultArea = document.getElementById('resultArea');
+        
+        // Tale-til-tekst setup
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+        if (recognition) {
+            recognition.lang = 'da-DK';
+            recognition.continuous = false;
         }
 
-        const recordBtn = document.getElementById('recordBtn');
-        const recordStatus = document.getElementById('recordStatus');
-        const micIcon = document.getElementById('micIcon');
-
-        recordBtn.onclick = async () => {
-            if (!isRecording) {
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    // Tjek hvilke formater browseren understøtter (vigtigt for iPhone)
-                    const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
-                    mediaRecorder = new MediaRecorder(stream, { mimeType });
-                    audioChunks = [];
-                    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-                    mediaRecorder.onstop = processAudio;
-                    mediaRecorder.start();
-                    isRecording = true;
-                    recordStatus.innerText = "Optager... Tryk for at stoppe";
-                    micIcon.classList.add('animate-pulse', 'text-red-600');
-                } catch (err) {
-                    showError("Ingen adgang til mikrofon. Tjek indstillinger.");
-                }
-            } else {
-                mediaRecorder.stop();
-                isRecording = false;
-                recordStatus.innerText = "Tryk for at tale";
-                micIcon.classList.remove('animate-pulse', 'text-red-600');
-                document.getElementById('loader').classList.remove('hidden');
-                document.getElementById('view-record').classList.add('hidden');
-            }
+        startBtn.onclick = () => {
+            if (!recognition) return alert("Din browser understøtter ikke diktering.");
+            if (!localStorage.getItem('gemini_api_key')) return setupKey();
+            
+            recognition.start();
+            status.innerText = "Lytter...";
+            startBtn.classList.add('animate-pulse', 'bg-red-600');
         };
 
-        async function processAudio() {
-            const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
-            const reader = new FileReader();
-            reader.readAsDataURL(blob);
-            reader.onloadend = async () => {
-                const base64Audio = reader.result.split(',')[1];
-                await getTranslations(base64Audio, mediaRecorder.mimeType);
+        if (recognition) {
+            recognition.onresult = async (event) => {
+                const transcript = event.results[0][0].transcript;
+                document.getElementById('danishText').innerText = transcript;
+                status.innerText = "Oversætter...";
+                await translate(transcript);
+            };
+
+            recognition.onend = () => {
+                startBtn.classList.remove('animate-pulse', 'bg-red-600');
+                if (status.innerText === "Lytter...") status.innerText = "Prøv igen";
             };
         }
 
-        async function getTranslations(audioBase64, mimeType) {
+        async function translate(text) {
             const key = localStorage.getItem('gemini_api_key');
-            if (!key) {
-                showError("API-nøgle mangler!");
-                setView('record');
-                document.getElementById('loader').classList.add('hidden');
-                return;
-            }
-
-            const prompt = "Lyt til denne lydoptagelse på dansk. Find de mest naturlige sætninger der bliver sagt. Oversæt dem til spansk. Returner kun et rent JSON array: [{\"da\": \"...\", \"es\": \"...\"}]";
-
             try {
                 const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        contents: [{
-                            parts: [
-                                { text: prompt },
-                                { inlineData: { mimeType: mimeType, data: audioBase64 } }
-                            ]
-                        }],
-                        generationConfig: { responseMimeType: "application/json" }
+                        contents: [{ parts: [{ text: `Oversæt kort og præcist til spansk: "${text}". Svar kun med oversættelsen.` }] }]
                     })
                 });
 
                 const data = await response.json();
-                if (data.error) throw new Error(data.error.message);
+                const result = data.candidates[0].content.parts[0].text;
                 
-                const newSentences = JSON.parse(data.candidates[0].content.parts[0].text);
-                sentences = [...newSentences, ...sentences]; // Nyeste øverst
-                saveSentences();
-                setView('list');
+                document.getElementById('spanishText').innerText = result;
+                resultArea.classList.remove('hidden');
+                status.innerText = "Færdig!";
+                playSpanish();
             } catch (err) {
-                console.error(err);
-                showError("Kunne ikke forstå lyden. Prøv igen tættere på mikrofonen.");
-                setView('record');
-            } finally {
-                document.getElementById('loader').classList.add('hidden');
+                alert("Fejl i API nøgle. Prøv at indstille den igen.");
+                setupKey();
             }
         }
 
-        function renderList() {
-            const container = document.getElementById('sentencesContainer');
-            container.innerHTML = sentences.length ? '' : '<p class="text-center py-8 text-slate-400">Ingen sætninger endnu.</p>';
-            
-            sentences.forEach((s, idx) => {
-                const tmpl = document.getElementById('sentence-item-tmpl').content.cloneNode(true);
-                tmpl.querySelector('.danish-text').innerText = s.da;
-                tmpl.querySelector('.spanish-text').innerText = s.es;
-                tmpl.querySelector('.speak-btn').onclick = () => speak(s.es);
-                tmpl.querySelector('.delete-btn').onclick = () => {
-                    sentences.splice(idx, 1);
-                    saveSentences();
-                    renderList();
-                };
-                container.appendChild(tmpl);
-            });
-        }
-
-        function speak(text) {
-            if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel(); // Stop igangværende tale
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = 'es-ES';
-                utterance.rate = 0.85;
-                window.speechSynthesis.speak(utterance);
-            }
-        }
-
-        function startPractice() {
-            if (!sentences.length) {
-                document.getElementById('flashcardContainer').innerHTML = '<p class="text-slate-400">Optag nogle sætninger først.</p>';
-                return;
-            }
-            practiceQueue = [...sentences].sort(() => Math.random() - 0.5);
-            showNextCard();
-        }
-
-        function showNextCard() {
-            const container = document.getElementById('flashcardContainer');
-            if (!practiceQueue.length) {
-                container.innerHTML = `
-                    <div class="text-center p-8 bg-white rounded-2xl shadow-sm border border-slate-200">
-                        <h3 class="text-xl font-bold text-slate-800">Færdig for nu! 🎉</h3>
-                        <button onclick="setView('record')" class="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg">Optag mere</button>
-                    </div>`;
-                return;
-            }
-
-            const current = practiceQueue[0];
-            container.innerHTML = `
-                <div class="w-full max-w-sm h-64 card-flip mb-8" id="cardElement">
-                    <div class="card-inner relative w-full h-full text-center" id="cardInner">
-                        <div class="card-front bg-white border-2 border-slate-200 rounded-2xl shadow-lg flex items-center justify-center p-6">
-                            <p class="text-xl font-medium text-slate-800">${current.da}</p>
-                        </div>
-                        <div class="card-back bg-blue-50 border-2 border-blue-200 rounded-2xl shadow-lg flex flex-col items-center justify-center p-6">
-                            <p class="text-xl font-bold text-blue-900">${current.es}</p>
-                            <button onclick="event.stopPropagation(); speak('${current.es}')" class="mt-4 p-3 bg-white rounded-full shadow text-xl">🔊</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="flex gap-4 w-full justify-center opacity-0 transition-opacity" id="controls">
-                    <button onclick="handleResponse(false)" class="px-6 py-3 bg-red-100 text-red-700 rounded-xl font-bold border border-red-200">Prøv igen</button>
-                    <button onclick="handleResponse(true)" class="px-6 py-3 bg-green-100 text-green-700 rounded-xl font-bold border border-green-200">Kunne den!</button>
-                </div>
-            `;
-
-            const card = document.getElementById('cardElement');
-            card.onclick = () => {
-                document.getElementById('cardInner').classList.toggle('flipped');
-                document.getElementById('controls').classList.remove('opacity-0');
-            };
-        }
-
-        function handleResponse(isCorrect) {
-            const item = practiceQueue.shift();
-            if (!isCorrect) practiceQueue.push(item);
-            showNextCard();
-        }
-
-        function saveSentences() {
-            localStorage.setItem('language_sentences', JSON.stringify(sentences));
-        }
-
-        function showError(msg) {
-            const toast = document.createElement('div');
-            toast.className = "fixed bottom-20 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-3 rounded-full shadow-xl z-50 text-sm font-bold";
-            toast.innerText = msg;
-            document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 4000);
+        function playSpanish() {
+            const text = document.getElementById('spanishText').innerText;
+            const utter = new SpeechSynthesisUtterance(text);
+            utter.lang = 'es-ES';
+            window.speechSynthesis.speak(utter);
         }
 
         function setupKey() {
-            const key = prompt("Indtast din Gemini API-nøgle:", localStorage.getItem('gemini_api_key') || "");
+            const key = prompt("Indtast din Gemini API-nøgle:");
             if (key) {
                 localStorage.setItem('gemini_api_key', key.trim());
                 location.reload();
             }
         }
-
-        window.onload = () => {
-            if (!localStorage.getItem('gemini_api_key')) {
-                setTimeout(setupKey, 500);
-            }
-            setView('record');
-        };
     </script>
-
-    <footer class="p-8 text-center">
-        <button onclick="setupKey()" class="text-xs text-slate-400 underline">Indstil API-nøgle</button>
-    </footer>
 </body>
 </html>
