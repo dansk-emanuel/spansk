@@ -3,277 +3,253 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LingoRecall - Active Recall App</title>
+    <title>Language Islands - Spreadsheet Edition</title>
+    <!-- Biblioteker via CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        .perspective-1000 { perspective: 1000px; }
-        .preserve-3d { transform-style: preserve-3d; }
-        .backface-hidden { backface-visibility: hidden; }
-        .rotate-y-180 { transform: rotateY(180deg); }
-        .card-transition { transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .blur-sm { filter: blur(4px); }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-900 font-sans min-h-screen">
+<body class="bg-slate-50">
     <div id="root"></div>
 
-    <!-- Firebase & React setup -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, doc, setDoc, addDoc, collection, onSnapshot, query, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import React, { useState, useEffect } from "https://esm.sh/react@18.2.0";
-        import ReactDOM from "https://esm.sh/react-dom@18.2.0/client";
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
 
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'lingo-recall-pro';
-        const apiKey = ""; // Gemini API Key via environment
+        // INDSÆT DIN API NØGLE HER
+        const API_KEY = ""; 
 
-        // --- UI Komponenter ---
-        const Icon = ({ name, size = 24 }) => {
-            const icons = {
-                plus: '<path d="M5 12h14m-7-7v14"/>',
-                book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20M4 19.5V5a2.5 2.5 0 0 1 2.5-2.5H20v14"/>',
-                card: '<rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/>',
-                volume: '<path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>',
-                trash: '<path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
-                send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>'
-            };
-            return React.createElement('svg', {
-                width: size,
-                height: size,
-                viewBox: "0 0 24 24",
-                fill: "none",
-                stroke: "currentColor",
-                strokeWidth: "2",
-                strokeLinecap: "round",
-                strokeLinejoin: "round",
-                dangerouslySetInnerHTML: { __html: icons[name] }
-            });
+        const Icon = ({ name, className = "w-4 h-4" }) => {
+            const iconRef = useRef(null);
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            }, [name]);
+            return <i data-lucide={name} class={`${className}`}></i>;
         };
 
-        // --- Hoved App ---
         const App = () => {
-            const [user, setUser] = useState(null);
-            const [step, setStep] = useState('welcome');
-            const [sourceLang, setSourceLang] = useState('');
-            const [sentences, setSentences] = useState([]);
-            const [inputValue, setInputValue] = useState('');
-            const [isProcessing, setIsProcessing] = useState(false);
+            const [islands, setIslands] = useState(() => {
+                const saved = localStorage.getItem('language_islands_data');
+                return saved ? JSON.parse(saved) : {};
+            });
+            const [currentIsland, setCurrentIsland] = useState(null);
+            const [newIslandName, setNewIslandName] = useState('');
+            const [inputText, setInputText] = useState('');
+            const [isTranslating, setIsTranslating] = useState(false);
+            const [hideSpanishAll, setHideSpanishAll] = useState(false);
+            const [revealedIds, setRevealedIds] = useState([]);
 
             useEffect(() => {
-                signInAnonymously(auth);
-                onAuthStateChanged(auth, (u) => {
-                    if (u) {
-                        setUser(u);
-                        // Hent brugerens indstillinger (sprogvalg)
-                        const configRef = doc(db, 'artifacts', appId, 'users', u.uid, 'settings', 'config');
-                        getDoc(configRef).then(snap => {
-                            if (snap.exists()) {
-                                setSourceLang(snap.data().sourceLang);
-                                setStep('input');
-                            }
-                        });
-                        // Lyt på sætninger
-                        const q = collection(db, 'artifacts', appId, 'users', u.uid, 'sentences');
-                        onSnapshot(q, (snapshot) => {
-                            const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-                            setSentences(data.sort((a, b) => b.createdAt - a.createdAt));
-                        });
-                    }
-                });
-            }, []);
+                localStorage.setItem('language_islands_data', JSON.stringify(islands));
+                if (window.lucide) window.lucide.createIcons();
+            }, [islands, currentIsland]);
 
-            const handleTranslate = async (e) => {
-                e.preventDefault();
-                if (!inputValue.trim() || isProcessing) return;
-                setIsProcessing(true);
-                const text = inputValue;
-                setInputValue('');
+            const addIsland = () => {
+                const trimmed = newIslandName.trim();
+                if (!trimmed || islands[trimmed]) return;
+                setIslands(prev => ({ ...prev, [trimmed]: [] }));
+                setNewIslandName('');
+            };
+
+            const deleteIsland = (name, e) => {
+                e.stopPropagation();
+                const newIslands = { ...islands };
+                delete newIslands[name];
+                setIslands(newIslands);
+                if (currentIsland === name) setCurrentIsland(null);
+            };
+
+            const processAndAddSentences = async (text) => {
+                if (!text.trim()) return;
+                setIsTranslating(true);
 
                 try {
-                    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    const prompt = `Take the following text and split it into individual logical sentences. Then translate each sentence to Spanish. Return ONLY a JSON array: [{"da": "dansk", "es": "spansk"}]. Text: "${text}"`;
+                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`, {
                         method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            contents: [{ parts: [{ text: `Translate "${text}" from ${sourceLang} to Danish. Return ONLY the translation.` }] }]
+                            contents: [{ parts: [{ text: prompt }] }],
+                            generationConfig: { responseMimeType: "application/json" }
                         })
                     });
-                    const res = await resp.json();
-                    const danish = res.candidates[0].content.parts[0].text.trim();
-                    
-                    await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'sentences'), {
-                        original: text,
-                        danish: danish,
-                        createdAt: Date.now()
-                    });
-                } catch (err) { console.error(err); }
-                setIsProcessing(false);
-            };
 
-            const playAudio = async (text) => {
-                try {
-                    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts?key=${apiKey}`, {
-                        method: 'POST',
-                        body: JSON.stringify({
-                            contents: [{ parts: [{ text: `Sig dette på dansk: ${text}` }] }],
-                            generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } } },
-                            model: "gemini-2.5-flash-preview-tts"
-                        })
-                    });
-                    const res = await resp.json();
-                    const base64 = res.candidates[0].content.parts[0].inlineData.data;
-                    
-                    // WAV Header creation for browser playback
-                    const audioBlob = createWavBlob(base64);
-                    const url = URL.createObjectURL(audioBlob);
-                    const audio = new Audio(url);
-                    audio.play();
-                } catch (e) { console.error(e); }
-            };
+                    const data = await response.json();
+                    const results = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text || "[]");
 
-            const createWavBlob = (base64) => {
-                const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-                const buffer = new ArrayBuffer(44 + bytes.length);
-                const view = new DataView(buffer);
-                const writeStr = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
-                writeStr(0, 'RIFF'); view.setUint32(4, 36 + bytes.length, true);
-                writeStr(8, 'WAVE'); writeStr(12, 'fmt '); view.setUint32(16, 16, true);
-                view.setUint16(20, 1, true); view.setUint16(22, 1, true);
-                view.setUint32(24, 24000, true); view.setUint32(28, 48000, true);
-                view.setUint16(32, 2, true); view.setUint16(34, 16, true);
-                writeStr(36, 'data'); view.setUint32(40, bytes.length, true);
-                new Uint8Array(buffer, 44).set(bytes);
-                return new Blob([buffer], { type: 'audio/wav' });
-            };
+                    const newEntries = results.map(item => ({
+                        id: Date.now() + Math.random(),
+                        danish: item.da,
+                        spanish: item.es
+                    }));
 
-            if (!user) return React.createElement('div', { className: 'h-screen flex items-center justify-center' }, 'Henter profil...');
-
-            return React.createElement('div', { className: 'max-w-md mx-auto min-h-screen flex flex-col' },
-                step !== 'welcome' && React.createElement('nav', { className: 'bg-white border-b p-4 sticky top-0 z-50 flex justify-around shadow-sm' },
-                    ['input', 'review', 'flashcards'].map(s => React.createElement('button', {
-                        key: s,
-                        onClick: () => setStep(s),
-                        className: `flex flex-col items-center gap-1 ${step === s ? 'text-blue-600' : 'text-slate-400'}`
-                    }, React.createElement(Icon, { name: s === 'input' ? 'plus' : s === 'review' ? 'book' : 'card' })))
-                ),
-                React.createElement('main', { className: 'p-5 flex-1' },
-                    step === 'welcome' && React.createElement('div', { className: 'pt-10 space-y-6 text-center animate-fade-in' },
-                        React.createElement('h1', { className: 'text-3xl font-black' }, 'LingoRecall'),
-                        React.createElement('p', { className: 'text-slate-500' }, 'Vælg dit modersmål:'),
-                        React.createElement('div', { className: 'grid gap-2 text-left h-[60vh] overflow-y-auto pr-2' },
-                            ["English", "Spanish", "French", "German", "Arabic", "Hindi", "Russian", "Japanese", "Turkish", "Vietnamese", "Portuguese", "Italian", "Polish", "Ukrainian", "Persian", "Urdu", "Dutch", "Greek", "Swedish", "Thai"].map(l => 
-                                React.createElement('button', {
-                                    key: l,
-                                    onClick: () => {
-                                        setSourceLang(l); setStep('input');
-                                        setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'config'), { sourceLang: l });
-                                    },
-                                    className: 'p-4 bg-white border border-slate-200 rounded-xl hover:bg-blue-50 font-medium'
-                                }, l)
-                            )
-                        )
-                    ),
-                    step === 'input' && React.createElement('div', { className: 'space-y-6 animate-fade-in' },
-                        React.createElement('header', null, React.createElement('h2', { className: 'text-2xl font-bold' }, 'Tilføj Sætninger'), React.createElement('p', { className: 'text-slate-400 text-sm' }, 'Modersmål: ' + sourceLang)),
-                        React.createElement('form', { onSubmit: handleTranslate, className: 'relative' },
-                            React.createElement('input', {
-                                value: inputValue,
-                                onChange: e => setInputValue(e.target.value),
-                                placeholder: 'Skriv en sætning...',
-                                className: 'w-full p-5 pr-14 bg-white rounded-2xl border-2 border-slate-100 shadow-sm focus:border-blue-500 outline-none text-lg',
-                                disabled: isProcessing
-                            }),
-                            React.createElement('button', {
-                                type: 'submit',
-                                className: 'absolute right-3 top-3 bottom-3 w-10 bg-blue-600 text-white rounded-xl flex items-center justify-center'
-                            }, isProcessing ? '...' : React.createElement(Icon, { name: 'send', size: 18 }))
-                        ),
-                        React.createElement('div', { className: 'bg-white rounded-2xl border overflow-hidden' },
-                            sentences.map(s => React.createElement('div', { key: s.id, className: 'p-4 border-b flex justify-between items-center' },
-                                React.createElement('div', { className: 'truncate pr-4' }, 
-                                    React.createElement('p', { className: 'font-medium truncate' }, s.original),
-                                    React.createElement('p', { className: 'text-blue-600 text-xs italic' }, s.danish)
-                                ),
-                                React.createElement('button', { onClick: () => deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'sentences', s.id)), className: 'text-slate-300' }, React.createElement(Icon, { name: 'trash', size: 16 }))
-                            ))
-                        )
-                    ),
-                    step === 'review' && React.createElement('div', { className: 'space-y-4 animate-fade-in' },
-                        React.createElement('h2', { className: 'text-2xl font-bold mb-4' }, 'Gennemse'),
-                        sentences.map(s => React.createElement('div', { key: s.id, className: 'bg-white p-5 rounded-2xl border flex items-center justify-between shadow-sm' },
-                            React.createElement('div', null,
-                                React.createElement('p', { className: 'text-xs text-slate-400 font-bold uppercase' }, sourceLang),
-                                React.createElement('p', { className: 'mb-2' }, s.original),
-                                React.createElement('p', { className: 'text-xs text-blue-500 font-bold uppercase' }, 'Dansk'),
-                                React.createElement('p', { className: 'text-lg font-bold' }, s.danish)
-                            ),
-                            React.createElement('button', { onClick: () => playAudio(s.danish), className: 'w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center' }, React.createElement(Icon, { name: 'volume' }))
-                        ))
-                    ),
-                    step === 'flashcards' && React.createElement(Flashcards, { sentences, playAudio, sourceLang })
-                )
-            );
-        };
-
-        const Flashcards = ({ sentences, playAudio, sourceLang }) => {
-            const [stack, setStack] = useState([...sentences]);
-            const [idx, setIdx] = useState(0);
-            const [flipped, setFlipped] = useState(false);
-            const [done, setDone] = useState(false);
-
-            if (sentences.length === 0) return React.createElement('div', { className: 'text-center py-20 text-slate-400' }, 'Ingen sætninger endnu.');
-            if (done) return React.createElement('div', { className: 'text-center py-10 space-y-6' }, 
-                React.createElement('h2', { className: 'text-2xl font-bold' }, 'Færdig!'),
-                React.createElement('button', { onClick: () => { setStack([...sentences]); setIdx(0); setDone(false); setFlipped(false); }, className: 'p-4 bg-blue-600 text-white rounded-xl w-full font-bold' }, 'Øv igen')
-            );
-
-            const curr = stack[idx];
-            const next = (correct) => {
-                if (correct) {
-                    if (idx + 1 >= stack.length) setDone(true);
-                    else { setIdx(idx + 1); setFlipped(false); }
-                } else {
-                    const s = [...stack];
-                    const item = s.splice(idx, 1)[0];
-                    s.push(item);
-                    setStack(s);
-                    setFlipped(false);
+                    setIslands(prev => ({
+                        ...prev,
+                        [currentIsland]: [...(prev[currentIsland] || []), ...newEntries]
+                    }));
+                } catch (error) {
+                    console.error("Fejl:", error);
+                } finally {
+                    setIsTranslating(false);
+                    setInputText('');
                 }
             };
 
-            return React.createElement('div', { className: 'space-y-8 animate-fade-in' },
-                React.createElement('div', { className: 'flex justify-between text-xs font-bold text-slate-400 uppercase' }, 
-                    React.createElement('span', null, 'Træning'), React.createElement('span', null, `${idx + 1} / ${stack.length}`)
-                ),
-                React.createElement('div', { 
-                    className: 'relative h-80 w-full perspective-1000 cursor-pointer',
-                    onClick: () => setFlipped(!flipped)
-                },
-                    React.createElement('div', { className: `relative w-full h-full card-transition preserve-3d ${flipped ? 'rotate-y-180' : ''}` },
-                        React.createElement('div', { className: 'absolute inset-0 backface-hidden bg-white rounded-3xl shadow-xl flex flex-col items-center justify-center p-8 text-center border' },
-                            React.createElement('p', { className: 'text-xs text-blue-400 font-bold mb-4 uppercase' }, sourceLang),
-                            React.createElement('p', { className: 'text-xl font-medium' }, curr.original)
-                        ),
-                        React.createElement('div', { className: 'absolute inset-0 backface-hidden rotate-y-180 bg-blue-600 rounded-3xl shadow-xl flex flex-col items-center justify-center p-8 text-center text-white' },
-                            React.createElement('p', { className: 'text-xs text-blue-200 font-bold mb-4 uppercase' }, 'Dansk'),
-                            React.createElement('p', { className: 'text-2xl font-bold mb-6' }, curr.danish),
-                            React.createElement('button', { onClick: (e) => { e.stopPropagation(); playAudio(curr.danish); }, className: 'w-12 h-12 bg-white/20 rounded-full flex items-center justify-center' }, React.createElement(Icon, { name: 'volume' }))
-                        )
-                    )
-                ),
-                React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
-                    React.createElement('button', { onClick: () => next(false), className: 'p-4 bg-white border text-red-500 rounded-xl font-bold' }, 'Svært'),
-                    React.createElement('button', { onClick: () => next(true), className: 'p-4 bg-white border text-green-600 rounded-xl font-bold' }, 'Rigtigt')
-                )
+            const toggleReveal = (id) => {
+                setRevealedIds(prev => prev.includes(id) ? prev.filter(rid => rid !== id) : [...prev, id]);
+            };
+
+            const deleteSentence = (id) => {
+                setIslands(prev => ({
+                    ...prev,
+                    [currentIsland]: prev[currentIsland].filter(s => s.id !== id)
+                }));
+            };
+
+            if (currentIsland) {
+                const sentences = islands[currentIsland] || [];
+                return (
+                    <div className="min-h-screen bg-white flex flex-col">
+                        <header className="bg-slate-900 text-white px-4 py-3 flex items-center justify-between sticky top-0 z-30">
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => setCurrentIsland(null)} className="p-1 hover:bg-slate-800 rounded">
+                                    <Icon name="chevron-left" className="w-5 h-5" />
+                                </button>
+                                <span className="font-bold text-xs uppercase tracking-widest">{currentIsland}</span>
+                            </div>
+                            <button 
+                                onClick={() => { setHideSpanishAll(!hideSpanishAll); setRevealedIds([]); }}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded text-[10px] font-black transition-all ${hideSpanishAll ? 'bg-amber-500 text-slate-900' : 'bg-slate-700 text-slate-300 border border-slate-600'}`}
+                            >
+                                <Icon name={hideSpanishAll ? "eye-off" : "eye"} className="w-3.5 h-3.5" />
+                                {hideSpanishAll ? 'SKJULER SPANSK' : 'VISER ALT'}
+                            </button>
+                        </header>
+
+                        <div className="bg-slate-100 border-b border-slate-200 p-2 sticky top-[48px] z-20">
+                            <div className="max-w-7xl mx-auto flex gap-2">
+                                <input 
+                                    type="text" 
+                                    value={inputText}
+                                    onChange={(e) => setInputText(e.target.value)}
+                                    placeholder="Skriv dansk sætning her..."
+                                    className="flex-1 border border-slate-300 rounded px-3 py-2 text-sm focus:outline-none"
+                                    onKeyPress={(e) => e.key === 'Enter' && processAndAddSentences(inputText)}
+                                />
+                                <button 
+                                    disabled={isTranslating || !inputText.trim()}
+                                    onClick={() => processAndAddSentences(inputText)}
+                                    className="bg-indigo-600 text-white px-6 py-2 rounded text-xs font-bold disabled:opacity-50 flex items-center gap-2 shrink-0"
+                                >
+                                    {isTranslating ? <Icon name="loader-2" className="w-4 h-4 animate-spin" /> : <Icon name="plus" className="w-4 h-4" />}
+                                    TILFØJ
+                                </button>
+                            </div>
+                        </div>
+
+                        <main className="flex-1 overflow-x-auto">
+                            <table className="w-full border-collapse table-fixed">
+                                <thead className="bg-slate-50 text-[10px] text-slate-500 font-bold uppercase tracking-widest sticky top-0 shadow-sm">
+                                    <tr>
+                                        <th className="px-4 py-2 border-b border-r border-slate-200 w-10 text-center">#</th>
+                                        <th className="px-4 py-2 border-b border-r border-slate-200 text-left w-[calc(50%-45px)]">Dansk</th>
+                                        <th className="px-4 py-2 border-b border-r border-slate-200 text-left w-[calc(50%-45px)]">Spansk</th>
+                                        <th className="px-4 py-2 border-b border-slate-200 w-10 text-center"></th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {sentences.map((s, index) => (
+                                        <tr key={s.id} className="hover:bg-slate-50 group">
+                                            <td className="px-2 py-3 text-[10px] text-slate-400 font-mono text-center border-r border-slate-100">{index + 1}</td>
+                                            <td className="px-4 py-3 text-sm text-slate-800 border-r border-slate-100 align-top break-words">{s.danish}</td>
+                                            <td className="px-4 py-3 border-r border-slate-100 align-top break-words">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <span className={`text-sm font-bold transition-all ${
+                                                        hideSpanishAll && !revealedIds.includes(s.id) 
+                                                        ? 'text-transparent select-none blur-sm bg-slate-100 rounded px-1' 
+                                                        : 'text-indigo-700'
+                                                    }`}>
+                                                        {s.spanish}
+                                                    </span>
+                                                    {hideSpanishAll && (
+                                                        <button onClick={() => toggleReveal(s.id)} className="shrink-0 text-slate-300 hover:text-indigo-600">
+                                                            <Icon name={revealedIds.includes(s.id) ? "eye-off" : "eye"} className="w-4 h-4" />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-2 py-3 text-center">
+                                                <button onClick={() => deleteSentence(s.id)} className="text-slate-200 hover:text-red-500">
+                                                    <Icon name="trash-2" className="w-4 h-4" />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </main>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen bg-slate-50">
+                    <header className="bg-slate-900 text-white p-8 rounded-b-[2rem] shadow-lg">
+                        <div className="max-w-5xl mx-auto">
+                            <h1 className="text-2xl font-black tracking-tighter flex items-center gap-2 uppercase">
+                                <Icon name="globe" className="w-6 h-6 text-amber-500" />
+                                Language Islands
+                            </h1>
+                            <p className="text-slate-500 text-[10px] font-bold mt-1 tracking-widest uppercase">Spreadsheet Edition</p>
+                        </div>
+                    </header>
+
+                    <main className="p-4 max-w-5xl mx-auto -mt-6">
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                            {Object.keys(islands).map((name) => (
+                                <div 
+                                    key={name}
+                                    onClick={() => setCurrentIsland(name)}
+                                    className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 cursor-pointer hover:border-indigo-500 transition-all group relative overflow-hidden"
+                                >
+                                    <div className="absolute top-0 left-0 w-1 h-full bg-slate-200 group-hover:bg-indigo-600" />
+                                    <div className="flex justify-between items-start mb-2">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase">{islands[name].length} rækker</span>
+                                        <button onClick={(e) => deleteIsland(name, e)} className="text-slate-200 hover:text-red-500">
+                                            <Icon name="trash-2" className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                    <h3 className="font-bold text-xs text-slate-800 uppercase truncate">{name}</h3>
+                                </div>
+                            ))}
+                            
+                            <div className="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-4 flex flex-col gap-2">
+                                <input 
+                                    type="text" 
+                                    value={newIslandName}
+                                    onChange={(e) => setNewIslandName(e.target.value)}
+                                    placeholder="NY Ø..."
+                                    className="w-full bg-transparent border-b border-slate-300 focus:border-indigo-600 focus:outline-none text-center font-bold text-[10px] text-slate-600 uppercase"
+                                    onKeyPress={(e) => e.key === 'Enter' && addIsland()}
+                                />
+                                <button onClick={addIsland} className="w-full bg-slate-800 text-white py-1.5 rounded text-[10px] font-bold uppercase">OPRET</button>
+                            </div>
+                        </div>
+                    </main>
+                </div>
             );
         };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(React.createElement(App));
+        root.render(<App />);
     </script>
 </body>
 </html>
